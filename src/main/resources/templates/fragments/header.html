@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head></head>
+<body>
+<th:block th:fragment="styles">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    :root{ --k-red:#d62828; --k-blue:#0057b8; }
+
+    body {
+        margin: 0;
+        padding-top: 60px; /* 고정된 헤더 높이 보정 */
+        overflow-x: hidden;
+    }
+
+    /* ----------------------- */
+    /* 헤더 전체를 감싸는 태그 스타일 */
+    header.site-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        z-index: 100;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 0 20px;
+        height: 60px;
+        border-bottom: 1px solid #e0e0e0;
+        background-color: #fff;
+    }
+
+    /* 헤더 내부 컨테이너 */
+    header.site-header .container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        max-width: 1200px; /* 최대 너비 재설정 */
+    }
+
+    /* 브랜드 로고 스타일 */
+    .header-logo {
+        display: flex;
+        align-items: center;
+        white-space: nowrap; /* 로고 텍스트 줄바꿈 방지 */
+    }
+    .header-logo a {
+        color: #111;
+        text-decoration: none;
+        font-weight: 900;
+        letter-spacing: .2px;
+    }
+    .header-logo .k {
+        font-weight: 1000;
+        line-height: 1;
+        background: linear-gradient(180deg, var(--k-red) 0%, #ff6b6b 35%, var(--k-blue) 65%, #3a86ff 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        font-size: 28px;
+    }
+    .header-logo .rest {
+        font-size: 26px;
+        font-weight: 800;
+        line-height: 1;
+    }
+
+    /* 검색창 스타일 */
+    header .search-wrap {
+        display: none;
+        flex-grow: 1; /* 남은 공간을 모두 차지하도록 설정 */
+        margin: 0 20px;
+    }
+    header .search-wrap.sec-on {
+        display: block;
+    }
+    header .search-input input {
+        width: 100%;
+        height: 42px;
+        border: 1px solid #e5e5e5;
+        border-radius: 12px;
+        background: #fafafa;
+        padding: 0 14px;
+        outline: none;
+        box-shadow: 0 1px 0 rgba(0,0,0,.02);
+    }
+    .search-input:focus {
+        background: #fff;
+        border-color: #d6d6d6;
+        box-shadow: 0 0 0 3px rgba(0,0,0,.03);
+        transition: .15s;
+    }
+
+    /* 네비게이션 스타일 */
+    .header-nav {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        position: relative;
+    }
+    .header-nav a { text-decoration: none; color: #555; font-size: 14px; }
+    .hamburger-menu { width: 24px; height: 24px; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+    .hamburger-menu i { font-size: 24px; color: #555; }
+    .hamburger-dropdown {
+        position: absolute; top: 100%; right: 0; width: 300px; background-color: #fff;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); z-index: 90;
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        opacity: 0; transform: translateY(-10px); pointer-events: none;
+        display: flex; flex-direction: column; gap: 15px; padding: 20px; border-radius: 5px;
+    }
+    .hamburger-dropdown.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  </style>
+</th:block>
+<body>
+<th:block th:fragment="header">
+  <header class="site-header">
+    <div class="container">
+      <div class="header-logo">
+        <a th:href="@{/}">
+          <span class="k">K</span><span class="rest">-Explore</span>
+        </a>
+      </div>
+
+      <div class="search-wrap" sec:authorize="isAuthenticated()" th:classappend="' sec-on'">
+        <form th:action="@{/kakaoResult4}" method="GET">
+          <div class="search-input-wrapper">
+            <input type="text"
+                   name="keyword"
+                   class="search-input"
+                   placeholder="여행지 또는 지역을 검색해보세요."
+                   th:value="${param.keyword}">
+          </div>
+        </form>
+      </div>
+
+      <div class="header-nav">
+        <a th:href="@{/user/login}" sec:authorize="!isAuthenticated()">로그인/회원가입</a>
+        <a th:href="@{/user/myPage}" sec:authorize="isAuthenticated()" th:classappend="' sec-on'">마이페이지</a>
+        <a th:href="@{/logout}" sec:authorize="isAuthenticated()" th:classappend="' sec-on'">로그아웃</a>
+        <div class="hamburger-menu" id="hamburger-menu">
+          <i class="fas fa-bars"></i>
+        </div>
+      </div>
+    </div>
+  </header>
+</th:block>
+
+<th:block th:fragment="scripts">
+  <script>
+    // 햄버거 메뉴 토글
+    document.addEventListener('DOMContentLoaded', () => {
+        const hamburgerBtn = document.getElementById('hamburger-menu');
+        const hamburgerDropdown = document.getElementById('hamburger-dropdown');
+
+        if (hamburgerBtn) {
+            hamburgerBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (hamburgerDropdown) {
+                    hamburgerDropdown.classList.toggle('open');
+                }
+            });
+        }
+
+        // 외부 클릭 시 닫기
+        window.addEventListener('click', (e) => {
+            if (hamburgerDropdown && hamburgerBtn && !hamburgerDropdown.contains(e.target) && !hamburgerBtn.contains(e.target)) {
+                hamburgerDropdown.classList.remove('open');
+            }
+        });
+    });
+  </script>
+</th:block>
+</body>
+</html>

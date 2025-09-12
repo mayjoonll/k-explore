@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Tour</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <style>
+        body { margin:0; font-family: Arial, sans-serif; }
+        header { display:flex; align-items:center; justify-content:space-between; padding:15px 30px; border-bottom:1px solid #eee; }
+        header h1 { font-size:24px; font-weight:bold; }
+        .search-box { flex:1; margin:0 20px; }
+        .search-box input { width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:5px; }
+        .auth-btn { border:1px solid #ccc; padding:6px 12px; border-radius:5px; background:#fff; cursor:pointer; }
+        .container { display:flex; padding:30px; }
+        .filter { width:200px; background:#f7f7f7; padding:20px; }
+        .filter h3 { font-size:16px; margin-bottom:10px; }
+        .filter label { display:block; margin:8px 0; cursor:pointer; }
+        .content { flex:1; margin-left:20px; }
+        .map { width:100%; height:460px; margin-bottom:20px; border-radius:12px; border:1px solid #eee; box-shadow:0 1px 2px rgba(0,0,0,.03); background:#fafafa; }
+        .item { display:flex; align-items:center; border-bottom:1px solid #eee; padding:15px 0; }
+        .item-img { width:150px; height:100px; background:#f0f0f0; margin-right:15px; object-fit:cover; }
+        .item-info { flex:1; }
+        .item-info h4 { margin:5px 0; font-size:18px; }
+        .item-info p { margin:2px 0; font-size:14px; color:#555; }
+
+        /* ✅ 페이지네이션 스타일 */
+        .pagination {
+            display:flex;
+            justify-content:center;
+            margin:20px 0;
+            gap:5px;
+        }
+        .pagination button {
+            border:1px solid #ccc;
+            background:#fff;
+            padding:6px 10px;
+            border-radius:5px;
+            cursor:pointer;
+        }
+        .pagination button.active {
+            background:#333;
+            color:#fff;
+            font-weight:bold;
+        }
+        .pagination button:disabled {
+            opacity:0.4;
+            cursor:default;
+        }
+
+        #debug { margin-top:10px; font-size:13px; color:#d00; white-space:pre-wrap; }
+    </style>
+
+    <!-- Kakao Maps SDK -->
+    <script>
+        const KAKAO_JS_KEY = "c1a0fc126750fc75623bdc1df69dfb93";
+
+        (function loadKakaoSDK() {
+            const src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(KAKAO_JS_KEY)}&autoload=false&libraries=services`;
+            const s = document.createElement("script");
+            s.src = src;
+            s.defer = true;
+            s.onload = () => { kakao.maps.load(initMap); };
+            s.onerror = () => showError("Kakao SDK 로드 실패");
+            document.head.appendChild(s);
+        })();
+
+        let accommodations = [];
+        let map, markers = [];
+
+        // ✅ 페이지네이션 상태
+        let currentPage = 1;
+        const itemsPerPage = 5;
+
+        function pickArrayFromResponse(json) {
+            if (!json) return [];
+            if (Array.isArray(json)) return json;
+            if (Array.isArray(json.content)) return json.content;
+            if (Array.isArray(json.data)) return json.data;
+            if (json._embedded) {
+                for (const k in json._embedded) {
+                    if (Array.isArray(json._embedded[k])) return json._embedded[k];
+                }
+            }
+            for (const k in json) {
+                if (Array.isArray(json[k])) return json[k];
+            }
+            if (typeof json === 'object') return [json];
+            return [];
+        }
+
+        const CATEGORY_MAP = {
+        '숙박': 'B02'
+        };
+
+        async function initMap() {
+            try {
+                const res = await fetch("/api/accommodations");
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                const json = await res.json();
+                accommodations = pickArrayFromResponse(json);
+
+                const mapContainer = document.getElementById('map');
+                const center = new kakao.maps.LatLng(36.5, 127.8);
+                map = new kakao.maps.Map(mapContainer, { center, level: 13 });
+
+                // 첫 렌더
+                renderPage(accommodations, 1);
+
+                // 필터 & 검색 이벤트
+                document.querySelectorAll('.filter input[type=checkbox]')
+                    .forEach(cb => cb.addEventListener('change', applyFilter));
+                document.querySelector('.search-box input')
+                    .addEventListener('input', applyFilter);
+
+            } catch (e) {
+                showError("데이터 불러오기 실패: " + e.message);
+                console.error(e);
+            }
+        }
+
+        function renderPage(data, page) {
+            currentPage = page;
+            const start = (page - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const pageItems = data.slice(start, end);
+
+            renderMarkers(pageItems);
+            renderList(pageItems);
+            renderPagination(data.length, page);
+        }
+
+        function renderMarkers(data) {
+            markers.forEach(m => m.setMap(null));
+            markers = [];
+            if (!Array.isArray(data)) return;
+
+            data.forEach(place => {
+                const lat = Number(place.mapy);
+                const lng = Number(place.mapx);
+                if (!lat || !lng) return;
+
+                const pos = new kakao.maps.LatLng(lat, lng);
+                const marker = new kakao.maps.Marker({ map, position: pos, title: place.title || "" });
+                markers.push(marker);
+            });
+        }
+
+        function renderList(data) {
+            const content = document.querySelector('.content');
+            content.querySelectorAll('.item').forEach(el => el.remove());
+
+            if (!Array.isArray(data) || data.length === 0) {
+                const none = document.createElement('div');
+                none.textContent = "검색 결과가 없습니다.";
+                content.appendChild(none);
+                return;
+            }
+
+            data.forEach(place => {
+                const div = document.createElement('div');
+                div.className = 'item';
+                const img = place.firstimage ? place.firstimage : 'https://via.placeholder.com/150';
+                div.innerHTML = `
+                    <img class="item-img" src="${img}" alt="${escapeHtml(place.title || '')}">
+                    <div class="item-info">
+                        <h4>${escapeHtml(place.title || '무명')}</h4>
+                        <p>${escapeHtml((place.addr1 || '') + ' ' + (place.addr2 || ''))}</p>
+                        <p>카테고리: ${escapeHtml(place.cat1 || '')} / ${escapeHtml(place.cat2 || '')}</p>
+                    </div>
+                `;
+                content.appendChild(div);
+            });
+        }
+
+        function renderPagination(totalItems, current) {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const container = document.getElementById('pagination');
+    container.innerHTML = "";
+    if (totalPages <= 1) return;
+
+    const makeBtn = (text, page, disabled=false, active=false) => {
+        const btn = document.createElement("button");
+        btn.textContent = text;
+        if (disabled) btn.disabled = true;
+        if (active) btn.classList.add("active");
+        btn.addEventListener("click", () => renderPage(accommodations, page));
+        return btn;
+    };
+
+    // <<, <
+    container.appendChild(makeBtn("<<", 1, current===1));
+    container.appendChild(makeBtn("<", current-1, current===1));
+
+    const maxVisible = 5; // ✅ 앞뒤로 보일 최대 버튼 개수
+    let start = Math.max(1, current - Math.floor(maxVisible/2));
+    let end = start + maxVisible - 1;
+    if (end > totalPages) {
+        end = totalPages;
+        start = Math.max(1, end - maxVisible + 1);
+    }
+
+    // 처음 ... 표시
+    if (start > 1) {
+        container.appendChild(makeBtn("1", 1));
+        if (start > 2) {
+            const dots = document.createElement("span");
+            dots.textContent = "...";
+            dots.style.margin = "0 5px";
+            container.appendChild(dots);
+        }
+    }
+
+    // 가운데 숫자 버튼
+    for (let i=start; i<=end; i++) {
+        container.appendChild(makeBtn(i, i, false, i===current));
+    }
+
+    // 끝 ... 표시
+    if (end < totalPages) {
+        if (end < totalPages - 1) {
+            const dots = document.createElement("span");
+            dots.textContent = "...";
+            dots.style.margin = "0 5px";
+            container.appendChild(dots);
+        }
+        container.appendChild(makeBtn(totalPages, totalPages));
+    }
+
+    // >, >>
+    container.appendChild(makeBtn(">", current+1, current===totalPages));
+    container.appendChild(makeBtn(">>", totalPages, current===totalPages));
+}
+
+        function applyFilter() {
+            let filtered = [...accommodations];
+            const keyword = (document.querySelector('.search-box input')?.value || '').trim().toLowerCase();
+            if (keyword) {
+                filtered = filtered.filter(p => {
+                    const title = (p.title||"").toLowerCase();
+                    const addr = ((p.addr1||"") + " " + (p.addr2||"")).toLowerCase();
+                    return title.includes(keyword) || addr.includes(keyword);
+                });
+            }
+            renderPage(filtered, 1);
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, s => (
+                {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[s]
+            ));
+        }
+
+        function showError(msg) {
+            document.getElementById("debug").textContent = msg;
+        }
+    </script>
+</head>
+<body>
+<header>
+    <h1>Tour</h1>
+    <div class="search-box"><input type="text" placeholder="여행지를 검색해보세요."></div>
+    <button class="auth-btn">로그인/회원가입</button>
+</header>
+<main class="container">
+    <aside class="filter">
+        <h3>필터</h3>
+        <label><input type="checkbox" checked> 전체</label>
+        <label><input type="checkbox"> 숙박</label>
+        <label><input type="checkbox"> 레저</label>
+        <label><input type="checkbox"> 관광지</label>
+        <label><input type="checkbox"> 쇼핑</label>
+        <label><input type="checkbox"> 음식점</label>
+    </aside>
+    <section class="content">
+        <h2>'전국' 숙박 정보</h2>
+        <div id="map" class="map"></div>
+        <!-- ✅ 페이지네이션 들어갈 자리 -->
+        <div id="pagination" class="pagination"></div>
+    </section>
+</main>
+<div id="debug"></div>
+</body>
+</html>

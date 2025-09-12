@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8">
+    <title>Tour</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        header { display: flex; align-items: center; justify-content: space-between; padding: 15px 30px; border-bottom: 1px solid #eee; }
+        header h1 { font-size: 24px; font-weight: bold; }
+        .search-box { flex: 1; margin: 0 20px; }
+        .search-box input { width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .auth-btn { border: 1px solid #ccc; padding: 6px 12px; border-radius: 5px; background: #fff; cursor: pointer; }
+        .container { display: flex; padding: 30px; }
+        .filter { width: 200px; background: #f7f7f7; padding: 20px; }
+        .filter h3 { font-size: 16px; margin-bottom: 10px; }
+        .filter label { display: block; margin: 8px 0; }
+        .content { flex: 1; margin-left: 20px; }
+        .map { width: 100%; height: 460px; margin-bottom: 20px; border-radius: 12px; border: 1px solid #eee; box-shadow: 0 1px 2px rgba(0,0,0,.03); background: #fafafa; }
+        .item { display: flex; align-items: center; border-bottom: 1px solid #eee; padding: 15px 0; }
+        .item-img { width: 150px; height: 100px; background: #f0f0f0; margin-right: 15px; }
+        .item-info { flex: 1; }
+        .item-info h4 { margin: 5px 0; font-size: 18px; }
+        .item-info p { margin: 2px 0; font-size: 14px; color: #555; }
+        .item-price { font-weight: bold; font-size: 16px; text-align: right; }
+        .item-price .original { text-decoration: line-through; font-size: 14px; color: #aaa; display: block; }
+        #debug { margin-top: 10px; font-size: 13px; color: #d00; white-space: pre-wrap; }
+    </style>
+    <!-- ✅ Kakao Maps SDK -->
+    <script>
+        const KAKAO_JS_KEY = "c1a0fc126750fc75623bdc1df69dfb93"; // 본인 키로 교체
+        (function loadKakaoSDK() {
+            const src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(KAKAO_JS_KEY)}&autoload=false&libraries=services`;
+            const s = document.createElement("script");
+            s.src = src;
+            s.defer = true;
+            s.onload = () => {
+                if (window.kakao && kakao.maps && kakao.maps.load) {
+                    kakao.maps.load(initMap);
+                } else {
+                    showError("kakao.maps 객체가 준비되지 않았습니다.");
+                }
+            };
+            s.onerror = () => showError("Kakao SDK 로드 실패: 네트워크/도메인/키 설정을 확인하세요.");
+            document.head.appendChild(s);
+        })();
+
+       function initMap() {
+        try {
+            const mapContainer = document.getElementById('map');
+            const center = new kakao.maps.LatLng(33.4996213, 126.5311884);
+            const map = new kakao.maps.Map(mapContainer, {
+                center,
+                level: 6
+            });
+
+            // Thymeleaf로 서버 데이터 가져오기
+            const places = /*[[${accommodations}]]*/ [];
+
+            places.forEach(place => {
+                const marker = new kakao.maps.Marker({
+                    map,
+                    position: new kakao.maps.LatLng(place.lat, place.lng),
+                    title: place.title
+                });
+
+                const infowindow = new kakao.maps.InfoWindow({
+                    content: `<div style="padding:5px;">${place.title}</div>`
+                });
+
+                kakao.maps.event.addListener(marker, 'mouseover', function() { infowindow.open(map, marker); });
+                kakao.maps.event.addListener(marker, 'mouseout', function() { infowindow.close(); });
+            });
+
+            console.log("[KakaoMap] init OK");
+        } catch (e) {
+            showError("지도 초기화 중 오류: " + (e && e.message ? e.message : e));
+        }
+    }
+
+        function showError(msg) {
+            const el = document.getElementById("debug");
+            if (el) el.textContent = msg;
+            console.error(msg);
+        }
+    </script>
+</head>
+<body>
+<header>
+    <h1>Tour</h1>
+    <div class="search-box">
+        <input type="text" placeholder="여행지를 검색해보세요.">
+    </div>
+    <button class="auth-btn">로그인/회원가입</button>
+</header>
+
+<main class="container">
+    <aside class="filter">
+        <h3>필터</h3>
+        <label><input type="checkbox" checked> 전체</label>
+        <label><input type="checkbox"> 숙박</label>
+        <label><input type="checkbox"> 레저</label>
+        <label><input type="checkbox"> 관광지</label>
+        <label><input type="checkbox"> 쇼핑</label>
+        <label><input type="checkbox"> 음식점</label>
+    </aside>
+
+    <section class="content">
+        <h2>'제주도' 검색 결과 742개</h2>
+        <div id="map" class="map"></div>
+
+        <!-- 숙박 리스트 -->
+        <div th:each="accommodation : ${accommodations}" class="item">
+            <div class="item-img"></div>
+            <div class="item-info">
+                <p th:text="${accommodation.category}">숙박 호텔</p>
+                <h4 th:text="${accommodation.title}">Hotel Example</h4>
+                <p th:text="${accommodation.address}">제주시</p>
+                <p th:text="'별점 ' + ${accommodation.rating}">별점 ★★★</p>
+            </div>
+            <div class="item-price">
+                <span class="original" th:text="${accommodation.originalPrice} + '원'">90,000원</span>
+                쿠폰 적용 시 <strong th:text="${accommodation.discountPrice} + '원'">83,700원</strong>
+            </div>
+        </div>
+
+        <div class="item">
+            <div class="item-img"></div>
+            <div class="item-info">
+                <p>숙박 호텔</p>
+                <h4>Hotel Example 2</h4>
+                <p>제주시</p>
+                <p>별점 ★★★</p>
+            </div>
+            <div class="item-price">
+                <span class="original">90,000원</span>
+                쿠폰 적용 시 <strong>83,700원</strong>
+            </div>
+        </div>
+
+    </section>
+</main>
+<div id="debug"></div>
+</body>
+</html>

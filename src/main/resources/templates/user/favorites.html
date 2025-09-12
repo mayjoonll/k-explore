@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>즐겨찾기 | K-Explore</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin:0; padding:20px; background:#f9f9f9; }
+        h1 { font-size:24px; margin-bottom:16px; }
+        .favorite-list { display:flex; flex-direction:column; gap:12px; }
+        .favorite-item { display:flex; align-items:center; gap:12px; padding:12px; border-radius:8px; background:#fff; border:1px solid #ddd; cursor:pointer; transition:background 0.2s; }
+        .favorite-item:hover { background:#f0f8ff; }
+        .favorite-item img { width:100px; height:80px; object-fit:cover; border-radius:6px; flex-shrink:0; }
+        .favorite-item .info { flex:1; }
+        .favorite-item .info a { font-weight:bold; font-size:16px; color:#007bff; text-decoration:none; }
+        .favorite-item .info a:hover { text-decoration:underline; }
+        .favorite-item .info p { margin:4px 0 0 0; font-size:14px; color:#555; }
+        .delete-btn { padding:4px 8px; border:none; border-radius:4px; background:#ff4757; color:#fff; cursor:pointer; }
+    </style>
+</head>
+<body>
+
+<h1>내 즐겨찾기</h1>
+
+<div class="favorite-list" id="favoriteList">
+    <div th:if="${#lists.isEmpty(favorites)}" id="emptyMsg">즐겨찾기가 없습니다.</div>
+
+    <!-- 즐겨찾기 아이템 반복 -->
+    <div th:each="fav : ${favorites}" class="favorite-item"
+         th:data-id="${fav.id}" th:data-type="${fav.type}">
+        <img th:src="${fav.firstImage}" alt="이미지">
+        <div class="info">
+            <a th:href="@{|/${fav.type}/view/${fav.id}|}" th:text="${fav.title}"></a>
+            <!-- 주소 표시 수정 -->
+            <p th:text="${fav.addr1 != null ? fav.addr1 : ''} + ' ' + ${fav.addr2 != null ? fav.addr2 : ''}"></p>
+        </div>
+        <button class="delete-btn">삭제</button>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const favoriteList = document.getElementById('favoriteList');
+
+        favoriteList.addEventListener('click', async (e) => {
+            const item = e.target.closest('.favorite-item');
+            if (!item) return;
+
+            const id = item.getAttribute('data-id');
+            const type = item.getAttribute('data-type');
+
+            // 삭제 버튼 클릭
+            if(e.target.classList.contains('delete-btn')){
+                const confirmed = confirm('이 즐겨찾기를 삭제하시겠습니까?');
+                if(!confirmed) return;
+
+                try {
+                    const res = await fetch(`/user/favorites/${id}?type=${type}`, { method: 'DELETE' });
+                    if(res.ok){
+                        item.remove();
+                        if(favoriteList.querySelectorAll('.favorite-item').length === 0){
+                            const emptyDiv = document.createElement('div');
+                            emptyDiv.id = 'emptyMsg';
+                            emptyDiv.textContent = '즐겨찾기가 없습니다.';
+                            favoriteList.appendChild(emptyDiv);
+                        }
+                    } else {
+                        alert('삭제에 실패했습니다.');
+                    }
+                } catch(err){
+                    console.error(err);
+                    alert('삭제 중 오류가 발생했습니다.');
+                }
+            }
+            // 삭제 버튼 외 클릭 → 상세 페이지 이동
+            else {
+                window.location.href = `/${type}/view/${id}`;
+            }
+        });
+    });
+</script>
+
+</body>
+</html>

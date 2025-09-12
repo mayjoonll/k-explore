@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8">
+    <title>Tour</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+    <th:block th:insert="~{fragments/header :: styles}"></th:block>
+    <style>
+        body { margin:0; font-family: Arial, sans-serif; }
+        header { display:flex; align-items:center; justify-content:space-between; padding:15px 30px; border-bottom:1px solid #eee; }
+        header h1 { font-size:24px; font-weight:bold; }
+        .search-box { flex:1; margin:0 20px; }
+        .search-box input { width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:5px; }
+        .auth-btn { border:1px solid #ccc; padding:6px 12px; border-radius:5px; background:#fff; cursor:pointer; }
+        .container { display:flex; padding:30px; width: 1200px; margin: 0 auto;}
+        .filter { width:200px; background:#f7f7f7; padding:20px; border-radius:8px; }
+        .filter h3 { font-size:16px; margin-bottom:10px; }
+        .filter label { display:block; margin:8px 0; cursor:pointer; }
+        .content { flex:1; margin-left:20px; }
+        .map { width:100%; height:460px; margin-bottom:20px; border-radius:12px; border:1px solid #eee; box-shadow:0 1px 2px rgba(0,0,0,.03); background:#fafafa; }
+        .item { display:flex; align-items:center; border-bottom:1px solid #eee; padding:15px 0; cursor:pointer; transition: background-color 0.2s; }
+        .item:hover { background-color: #f8f9fa; }
+        .item-img { width:150px; height:100px; background:#f0f0f0; margin-right:15px; object-fit:cover; border-radius:8px; }
+        .item-info { flex:1; }
+        .item-info h4 { margin:5px 0; font-size:18px; }
+        .item-info p { margin:2px 0; font-size:14px; color:#555; }
+        .pagination { display:flex; justify-content:center; margin:20px 0; gap:5px; }
+        .pagination button { border:1px solid #ccc; background:#fff; padding:6px 10px; border-radius:5px; cursor:pointer; }
+        .pagination button.active { background:#333; color:#fff; font-weight:bold; }
+        .pagination button:disabled { opacity:0.4; cursor:default; }
+        .no-results { font-size:16px; color:#666; margin:20px 0; text-align: center; padding: 40px; }
+        #debug { margin-top:10px; font-size:13px; color:#d00; white-space:pre-wrap; }
+        .loading { text-align: center; padding: 40px; color: #666; }
+        .error { color: #d00; padding: 20px; background: #fee; border-radius: 8px; margin: 20px 0; }
+    </style>
+    <!-- kakaoResult4.html의 수정된 JavaScript 부분 -->
+    <script th:inline="javascript">
+        const KAKAO_JS_KEY = "c1a0fc126750fc75623bdc1df69dfb93";
+
+        // 서버에서 전달된 데이터를 직접 사용합니다.
+        const places = /*[[${accommodations}]]*/ [];
+        const serverCurrentPage = /*[[${currentPage}]]*/ 0;
+        const serverTotalPages = /*[[${totalPages}]]*/ 0;
+        const serverKeyword = /*[[${keyword}]]*/ '';
+
+        let map, markers = [];
+        let currentPage = 1;
+        const itemsPerPage = 5;
+
+        const CATEGORY_MAP = {
+            '전체': ['B02','A03','A01','A04','A05'],
+            '숙박': ['B02'],
+            '레저': ['A03'],
+            '관광지': ['A01'],
+            '쇼핑': ['A04'],
+            '음식점': ['A05']
+        };
+
+        function getUrlParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return {
+                keyword: urlParams.get('keyword') || '',
+                page: parseInt(urlParams.get('page')) || 0,
+                region: urlParams.get('region') || '',
+                category: urlParams.get('category') || ''
+            };
+        }
+
+        function setInitialSearchAndTitle() {
+            const params = getUrlParams();
+            const searchInput = document.querySelector('.search-box input');
+            const pageTitle = document.getElementById('page-title');
+
+            if (searchInput) {
+                // 서버에서 전달된 키워드 또는 URL 파라미터 사용
+                const keyword = serverKeyword || params.keyword;
+                if (keyword) {
+                    searchInput.value = keyword;
+                }
+            }
+
+            if (pageTitle) {
+                const keyword = serverKeyword || params.keyword;
+                const titleText = keyword ? `'${keyword}' 여행 정보` : '전국 여행 정보';
+                pageTitle.textContent = titleText;
+            }
+        }
+
+        // 페이지네이션을 서버 데이터 기반으로 렌더링
+        function renderServerPagination() {
+            const container = document.querySelector('.pagination');
+            if (!container) return;
+
+            container.innerHTML = "";
+
+            if (serverTotalPages <= 1) return;
+
+            const params = getUrlParams();
+            const keyword = serverKeyword || params.keyword || '';
+
+            const makeBtn = (text, page, disabled = false, active = false) => {
+                const btn = document.createElement("button");
+                btn.textContent = text;
+                if (disabled) btn.disabled = true;
+                if (active) btn.classList.add("active");
+                btn.addEventListener("click", () => {
+                    if (!disabled) {
+                        const url = new URL(window.location);
+                        url.searchParams.set('page', page);
+                        if (keyword) {
+                            url.searchParams.set('keyword', keyword);
+                        }
+                        window.location.href = url.toString();
+                    }
+                });
+                return btn;
+            };
+
+            // 이전 페이지
+            container.appendChild(makeBtn("≪", 0, serverCurrentPage === 0));
+            container.appendChild(makeBtn("‹", serverCurrentPage - 1, serverCurrentPage === 0));
+
+            // 페이지 번호들
+            const maxVisible = 5;
+            let start = Math.max(0, serverCurrentPage - Math.floor(maxVisible / 2));
+            let end = Math.min(serverTotalPages - 1, start + maxVisible - 1);
+
+            if (end - start + 1 < maxVisible) {
+                start = Math.max(0, end - maxVisible + 1);
+            }
+
+            if (start > 0) {
+                container.appendChild(makeBtn("1", 0));
+                if (start > 1) {
+                    const dots = document.createElement("span");
+                    dots.textContent = "...";
+                    dots.style.margin = "0 5px";
+                    container.appendChild(dots);
+                }
+            }
+
+            for (let i = start; i <= end; i++) {
+                container.appendChild(makeBtn((i + 1).toString(), i, false, i === serverCurrentPage));
+            }
+
+            if (end < serverTotalPages - 1) {
+                if (end < serverTotalPages - 2) {
+                    const dots = document.createElement("span");
+                    dots.textContent = "...";
+                    dots.style.margin = "0 5px";
+                    container.appendChild(dots);
+                }
+                container.appendChild(makeBtn(serverTotalPages.toString(), serverTotalPages - 1));
+            }
+
+            // 다음 페이지
+            container.appendChild(makeBtn("›", serverCurrentPage + 1, serverCurrentPage === serverTotalPages - 1));
+            container.appendChild(makeBtn("≫", serverTotalPages - 1, serverCurrentPage === serverTotalPages - 1));
+        }
+
+        async function initializeApp() {
+            try {
+                showLoading();
+                setInitialSearchAndTitle();
+                await loadKakaoSDK();
+
+                const mapContainer = document.getElementById('map');
+                const center = new kakao.maps.LatLng(36.5, 127.8);
+                map = new kakao.maps.Map(mapContainer, { center, level: 13 });
+
+                hideLoading();
+                setupEventListeners();
+
+                // 서버에서 받은 데이터로 지도와 리스트 렌더링
+                renderMarkers(places);
+                renderList(places);
+                renderServerPagination(); // 서버 기반 페이지네이션
+                adjustMapToResults(places);
+
+            } catch (error) {
+                showError(`초기화 실패: ${error.message}`);
+            }
+        }
+
+        function setupEventListeners() {
+            const searchInput = document.querySelector('.search-box input');
+            if (searchInput) {
+                // 검색 시 서버로 이동
+                searchInput.addEventListener('keydown', e => {
+                    if(e.key === 'Enter') {
+                        e.preventDefault();
+                        const keyword = searchInput.value.trim();
+                        const url = new URL(window.location);
+                        if (keyword) {
+                            url.searchParams.set('keyword', keyword);
+                        } else {
+                            url.searchParams.delete('keyword');
+                        }
+                        url.searchParams.set('page', '0'); // 첫 페이지로 리셋
+                        window.location.href = url.toString();
+                    }
+                });
+            }
+
+            // 카테고리 필터는 클라이언트사이드에서 처리
+            document.querySelectorAll('.filter input[type=checkbox]').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const allBox = document.querySelector('.filter input[data-cat="전체"]');
+                    const otherBoxes = Array.from(document.querySelectorAll('.filter input[type=checkbox]')).filter(b => b.dataset.cat !== '전체');
+
+                    if(cb.dataset.cat === '전체'){
+                        otherBoxes.forEach(b => b.checked = cb.checked);
+                    } else {
+                        if(otherBoxes.every(b => !b.checked)) {
+                            allBox.checked = true;
+                        } else {
+                            allBox.checked = false;
+                        }
+                    }
+                    applyClientSideFilter();
+                });
+            });
+        }
+
+        // 클라이언트사이드 카테고리 필터링 (페이지네이션 없이)
+        function applyClientSideFilter() {
+            const checkedBoxes = Array.from(document.querySelectorAll('.filter input[type=checkbox]:checked'));
+            let selectedCats = new Set();
+            checkedBoxes.forEach(cb => {
+                const cats = CATEGORY_MAP[cb.dataset.cat];
+                if (cats) cats.forEach(c => selectedCats.add(c));
+            });
+
+            if (selectedCats.size === 0) {
+                Object.values(CATEGORY_MAP).forEach(arr => arr.forEach(c => selectedCats.add(c)));
+            }
+
+            const filtered = places.filter(place =>
+                selectedCats.has(place.cat1) ||
+                selectedCats.has(place.cat2) ||
+                selectedCats.has(place.cat3)
+            );
+
+            renderMarkers(filtered);
+            renderList(filtered);
+            adjustMapToResults(filtered);
+
+            // 필터링 시에는 페이지네이션 숨김
+            const pagination = document.querySelector('.pagination');
+            if (pagination) {
+                pagination.style.display = filtered.length === places.length ? 'flex' : 'none';
+            }
+        }
+
+        // 나머지 함수들은 기존과 동일...
+        function renderMarkers(data) {
+            markers.forEach(m => m.setMap(null));
+            markers = [];
+            if (!Array.isArray(data) || !map) return;
+            data.forEach(place => {
+                const lat = Number(place.mapy);
+                const lng = Number(place.mapx);
+                if (!lat || !lng) return;
+                const pos = new kakao.maps.LatLng(lat, lng);
+                const marker = new kakao.maps.Marker({
+                    map,
+                    position: pos,
+                    title: place.title || ""
+                });
+                marker.setClickable(true);
+                kakao.maps.event.addListener(marker, 'click', function() {
+                    handleItemClick(place);
+                });
+                markers.push(marker);
+            });
+        }
+
+        function renderList(data) {
+            const content = document.querySelector('.content');
+            content.querySelectorAll('.item, .no-results').forEach(el => el.remove());
+            if (!Array.isArray(data) || data.length === 0) {
+                const noResults = document.createElement('div');
+                noResults.className = 'no-results';
+                noResults.innerHTML = '<h3>검색 결과가 없습니다</h3><p>다른 검색어나 필터를 시도해보세요.</p>';
+                content.appendChild(noResults);
+                return;
+            }
+            data.forEach(place => {
+                const div = document.createElement('div');
+                div.className = 'item';
+                const img = place.firstimage || 'https://via.placeholder.com/150x100?text=이미지+없음';
+                div.innerHTML = `
+                    <img class="item-img" src="${img}" alt="${escapeHtml(place.title||'')}" onerror="this.src='https://via.placeholder.com/150x100?text=이미지+없음'">
+                    <div class="item-info">
+                        <h4>${escapeHtml(place.title||'무명')}</h4>
+                        <p>📍 ${escapeHtml(getFullAddress(place))}</p>
+                        <p>🏷️ ${escapeHtml(getCategoryText(place))}</p>
+                    </div>
+                `;
+                div.addEventListener('click', () => handleItemClick(place));
+                content.appendChild(div);
+            });
+        }
+
+        function adjustMapToResults(data) {
+            if (!data || data.length === 0 || !map) return;
+            const bounds = new kakao.maps.LatLngBounds();
+            let hasValidCoords = false;
+            data.forEach(place => {
+                const lat = Number(place.mapy);
+                const lng = Number(place.mapx);
+                if (lat && lng) {
+                    bounds.extend(new kakao.maps.LatLng(lat, lng));
+                    hasValidCoords = true;
+                }
+            });
+            if (hasValidCoords) {
+                map.setBounds(bounds);
+            }
+        }
+
+        // 기타 유틸리티 함수들...
+        function getFullAddress(place) {
+            const parts = [place.addr1, place.addr2, place.addr3].filter(Boolean);
+            return parts.length > 0 ? parts.join(' ') : '주소 정보 없음';
+        }
+
+        function getCategoryText(place) {
+            const cats = [place.cat1, place.cat2, place.cat3].filter(Boolean);
+            return cats.length > 0 ? cats.join(' > ') : '카테고리 미분류';
+        }
+
+        function handleItemClick(place) {
+            const urlMap = {
+                'B02': `/accommodation/view/${place.id}`,
+                'A03': `/leports/view/${place.id}`,
+                'A01': `/touristSpot/view/${place.id}`,
+                'A04': `/shopping/view/${place.id}`,
+                'A05': `/restaurant/view/${place.id}`
+            };
+            if(place.cat1 && urlMap[place.cat1]){
+                window.location.href = urlMap[place.cat1];
+            } else {
+                alert(`상세 정보를 불러올 수 없습니다.\\n카테고리: ${place.cat1 || '미분류'}`);
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, s => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[s]));
+        }
+
+        function showLoading() {
+            const content = document.querySelector('.content');
+            const loading = document.createElement('div');
+            loading.className = 'loading';
+            loading.id = 'loading';
+            loading.innerHTML = '<p>데이터를 불러오는 중...</p>';
+            content.appendChild(loading);
+        }
+
+        function hideLoading() {
+            const loading = document.getElementById('loading');
+            if (loading) loading.remove();
+        }
+
+        function showError(message) {
+            hideLoading();
+            const content = document.querySelector('.content');
+            const error = document.createElement('div');
+            error.className = 'error';
+            error.innerHTML = `<h3>오류 발생</h3><p>${message}</p>`;
+            content.appendChild(error);
+            console.error('Error:', message);
+        }
+
+        async function loadKakaoSDK() {
+            return new Promise((resolve, reject) => {
+                if (window.kakao && window.kakao.maps) {
+                    resolve();
+                    return;
+                }
+                const src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(KAKAO_JS_KEY)}&autoload=false&libraries=services`;
+                const script = document.createElement("script");
+                script.src = src;
+                script.defer = true;
+                script.onload = () => {
+                    if (window.kakao && window.kakao.maps) {
+                        kakao.maps.load(() => resolve());
+                    } else {
+                        reject(new Error('Kakao Maps API 로드 실패'));
+                    }
+                };
+                script.onerror = () => reject(new Error('Kakao SDK 스크립트 로드 실패'));
+                document.head.appendChild(script);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
+</head>
+<body>
+
+<div th:replace="fragments/header :: header"></div>
+
+<main class="container">
+    <aside class="filter">
+        <h3>필터</h3>
+        <label><input type="checkbox" checked data-cat="전체">전체</label>
+        <label><input type="checkbox" data-cat="숙박">숙박</label>
+        <label><input type="checkbox" data-cat="레저">레저</label>
+        <label><input type="checkbox" data-cat="관광지">관광지</label>
+        <label><input type="checkbox" data-cat="쇼핑">쇼핑</label>
+        <label><input type="checkbox" data-cat="음식점">음식점</label>
+    </aside>
+
+    <section class="content">
+        <h2 id="page-title"></h2>
+        <div id="map" class="map"></div>
+        <div class="pagination" id="pagination"></div>
+    </section>
+</main>
+
+<div id="debug"></div>
+</body>
+</html>

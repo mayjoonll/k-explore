@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <title>검색 결과</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root { --w: 860px; }
+        body{
+          font-family: system-ui, -apple-system, "Noto Sans KR", Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+          margin: 0; padding: 40px 16px; color:#111;
+        }
+        h1{ max-width: var(--w); margin:0 auto 16px; font-size:28px; }
+        #wrap{ max-width: var(--w); margin: 0 auto; }
+        #map{
+          width: 100%;
+          height: 460px;
+          border-radius: 12px;
+          border: 1px solid #eee;
+          box-shadow: 0 1px 2px rgba(0,0,0,.03);
+          background: #fafafa;
+        }
+        #debug{
+          margin-top: 10px;
+          font-size: 13px;
+          color: #d00;
+          white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+<div id="wrap">
+    <h1>검색 결과</h1>
+    <div id="map"></div>
+    <div id="debug"></div>
+</div>
+
+<script>
+    // ▶ 여기에 본인의 Kakao JavaScript 키를 넣으세요
+    const KAKAO_JS_KEY = "c1a0fc126750fc75623bdc1df69dfb93"; // ← 바꿔도 됩니다
+
+    // Kakao SDK 스크립트 동적 로드(autoload=false 필수)
+    (function loadKakaoSDK() {
+      const src =
+        "https://dapi.kakao.com/v2/maps/sdk.js?appkey=" +
+        encodeURIComponent(KAKAO_JS_KEY) +
+        "&autoload=false&libraries=services";
+      const s = document.createElement("script");
+      s.src = src;
+      s.defer = true;
+      s.onload = () => {
+        // SDK 로드 완료 후에 지도 초기화 실행
+        if (window.kakao && kakao.maps && kakao.maps.load) {
+          kakao.maps.load(initMap);
+        } else {
+          showError("kakao.maps 객체가 준비되지 않았습니다.");
+        }
+      };
+      s.onerror = () => {
+        showError("Kakao SDK 로드 실패: 네트워크/도메인/키 설정을 확인하세요.");
+      };
+      document.head.appendChild(s);
+    })();
+
+    function initMap() {
+      try {
+        const mapContainer = document.getElementById("map");
+
+        // 예시 좌표(제주 시청 근처). 필요 시 검색 결과 좌표로 교체하세요.
+        const center = new kakao.maps.LatLng(33.4996213, 126.5311884);
+
+        const map = new kakao.maps.Map(mapContainer, {
+          center,
+          level: 6,          // 숫자 작을수록 확대
+          draggable: true,   // 드래그 가능
+          scrollwheel: true, // 휠 줌 허용
+        });
+
+        // 마커 표시
+        const marker = new kakao.maps.Marker({ position: center });
+        marker.setMap(map);
+
+        // 지도가 준비되었음을 로그로 표시
+        console.log("[KakaoMap] init OK");
+      } catch (e) {
+        showError("지도 초기화 중 오류: " + (e && e.message ? e.message : e));
+      }
+    }
+
+    function showError(msg) {
+      const el = document.getElementById("debug");
+      if (el) el.textContent = msg;
+      console.error(msg);
+    }
+</script>
+</body>
+</html>
