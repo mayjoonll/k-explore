@@ -125,7 +125,9 @@
                 <form th:action="@{/logout}" method="post">
                     <button class="btn" type="submit">로그아웃</button>
                 </form>
-                <form th:action="@{/user/withdraw}" method="post" onsubmit="return confirm('정말 탈퇴하시겠습니까?');">
+                <!-- 회원탈퇴 URL을 deleteMyAccount로 수정 -->
+                <form th:action="@{/user/deleteMyAccount}" method="post"
+                      onsubmit="return confirm('정말 탈퇴하시겠습니까?');">
                     <button class="btn danger" type="submit">회원탈퇴</button>
                 </form>
             </div>

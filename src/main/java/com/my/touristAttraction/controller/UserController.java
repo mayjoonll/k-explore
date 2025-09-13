@@ -92,7 +92,7 @@ public class UserController {
     @PostMapping("/update")
     public String updateUsers(@ModelAttribute("users") UserDto users,
                               RedirectAttributes rttr) {
-        boolean ok = userService.updateUserInfo(users);
+        boolean ok = userService.updateUserInfoByUsername(users.getUsername(), users);
         if (!ok) {
             rttr.addFlashAttribute("msg", "업데이트 실패: 회원을 찾을 수 없거나 입력값이 올바르지 않습니다.");
             return "redirect:/user/update?email=" + users.getEmail();
@@ -119,7 +119,12 @@ public class UserController {
     public String changePassword(Authentication authentication,
                                  @RequestParam String oldPassword,
                                  @RequestParam String newPassword,
+                                 @RequestParam String confirmPassword,
                                  Model model) {
+        if (!newPassword.equals(confirmPassword)) {
+            model.addAttribute("error", "새 비밀번호와 확인이 일치하지 않습니다.");
+            return "/user/changePassword";
+        }
         String username = authentication.getName();
         boolean success = userService.changePasswordByUsername(username, oldPassword, newPassword);
         if (!success) {
@@ -137,19 +142,67 @@ public class UserController {
         return "/user/myPage";
     }
 
-    @PostMapping("/myPage/update")
-    public String updateMyProfile(Authentication auth,
-                                  @RequestParam String name,
-                                  @RequestParam String nickname) {
+    // ===================== 마이페이지 수정 =====================
+    @PostMapping("/email/edit")
+    public String updateEmail(Authentication auth,
+                              @RequestParam String email,
+                              RedirectAttributes rttr) {
         String username = auth.getName();
-        userService.updateMyInfo(username, name, nickname);
+        boolean success = userService.updateUserInfoByUsername(username,
+                UserDto.builder().email(email).build());
+        rttr.addFlashAttribute("msg", success ? "이메일이 수정되었습니다." : "이메일 수정 실패");
         return "redirect:/user/myPage";
     }
 
+    @PostMapping("/name/edit")
+    public String updateName(Authentication auth,
+                             @RequestParam String name,
+                             RedirectAttributes rttr) {
+        String username = auth.getName();
+        boolean success = userService.updateUserInfoByUsername(username,
+                UserDto.builder().name(name).build());
+        rttr.addFlashAttribute("msg", success ? "이름이 수정되었습니다." : "이름 수정 실패");
+        return "redirect:/user/myPage";
+    }
+
+    @PostMapping("/nickname/edit")
+    public String updateNickname(Authentication auth,
+                                 @RequestParam String nickname,
+                                 RedirectAttributes rttr) {
+        String username = auth.getName();
+        boolean success = userService.updateUserInfoByUsername(username,
+                UserDto.builder().nickname(nickname).build());
+        rttr.addFlashAttribute("msg", success ? "닉네임이 수정되었습니다." : "닉네임 수정 실패");
+        return "redirect:/user/myPage";
+    }
+
+    @PostMapping("/password/edit")
+    public String updatePassword(Authentication auth,
+                                 @RequestParam String currentPassword,
+                                 @RequestParam String newPassword,
+                                 @RequestParam String confirmPassword,
+                                 RedirectAttributes rttr) {
+        if (!newPassword.equals(confirmPassword)) {
+            rttr.addFlashAttribute("msg", "새 비밀번호와 확인이 일치하지 않습니다.");
+            return "redirect:/user/myPage";
+        }
+
+        String username = auth.getName();
+        boolean success = userService.changePasswordByUsername(username, currentPassword, newPassword);
+        rttr.addFlashAttribute("msg", success ? "비밀번호가 변경되었습니다." : "비밀번호 변경 실패");
+        return "redirect:/user/myPage";
+    }
+
+    // ===================== 회원탈퇴 =====================
     @PostMapping("/deleteMyAccount")
     public String deleteMyAccount(Authentication authentication,
                                   HttpServletRequest request,
                                   RedirectAttributes rttr) {
+        if (authentication == null || authentication.getName() == null) {
+            rttr.addFlashAttribute("msg", "로그인 후 이용해주세요.");
+            return "redirect:/login";
+        }
+
         String username = authentication.getName();
         boolean removed = userService.deleteByUsername(username);
 
@@ -157,11 +210,8 @@ public class UserController {
         HttpSession session = request.getSession(false);
         if (session != null) session.invalidate();
 
-        if (removed) {
-            rttr.addFlashAttribute("msg", "회원탈퇴가 완료되었습니다.");
-        } else {
-            rttr.addFlashAttribute("msg", "회원탈퇴 실패: 존재하지 않는 계정입니다.");
-        }
+        rttr.addFlashAttribute("msg", removed ? "회원탈퇴가 완료되었습니다."
+                : "회원탈퇴 실패: 존재하지 않거나 연관 데이터 오류.");
         return "redirect:/";
     }
 
@@ -237,7 +287,6 @@ public class UserController {
         return "/user/favorites";
     }
 
-    // 수정: 프론트에서 title, addr 등 안 받아도 DB 조회 후 저장
     @PostMapping("/favorites/{id}")
     @ResponseBody
     public ResponseEntity<?> addFavorite(
@@ -246,7 +295,7 @@ public class UserController {
             Authentication auth) {
 
         String username = auth.getName();
-        userService.addFavorite(username, id, type); // UserService에서 DB 조회 후 저장
+        userService.addFavorite(username, id, type);
         return ResponseEntity.ok(Map.of("status", "added"));
     }
 
@@ -261,6 +310,4 @@ public class UserController {
         userService.removeFavorite(username, id, type);
         return ResponseEntity.ok(Map.of("status", "removed"));
     }
-
-
 }

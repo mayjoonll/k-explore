@@ -4,9 +4,9 @@ import com.my.touristAttraction.dto.FavoriteDto;
 import com.my.touristAttraction.dto.UserDto;
 import com.my.touristAttraction.entity.*;
 import com.my.touristAttraction.repository.*;
-
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserService {
 
     private final UserRepository userRepository;
@@ -53,8 +54,14 @@ public class UserService {
 
     @Transactional
     public boolean deleteByUsername(String username) {
-        int affected = userRepository.deleteByUsernameHard(username);
-        return affected > 0;
+        try {
+            int affected = userRepository.deleteByUsernameHard(username);
+            log.info("deleteByUsername: {} rows affected for username={}", affected, username);
+            return affected > 0;
+        } catch (Exception e) {
+            log.error("회원 삭제 중 오류 발생 (username={}): {}", username, e.getMessage(), e);
+            return false;
+        }
     }
 
     public boolean changePasswordByUsername(String username, String oldPassword, String newPassword) {
@@ -78,16 +85,31 @@ public class UserService {
         return userRepository.existsByNickname(nickname);
     }
 
+    public boolean checkEmailDuplicate(String email) {
+        return userRepository.existsByEmail(email);
+    }
+
+    // ========================= 회원 정보 수정 =========================
     @Transactional
-    public boolean updateUserInfo(UserDto users) {
-        UserEntity entity = userRepository.findByEmail(users.getEmail())
-                .orElse(null);
+    public boolean updateUserInfoByUsername(String username, UserDto users) {
+        UserEntity entity = userRepository.findByUsername(username).orElse(null);
         if (entity == null) return false;
 
-        if (users.getName() != null && !users.getName().isBlank()) entity.setName(users.getName());
-        if (users.getNickname() != null && !users.getNickname().isBlank()) entity.setNickname(users.getNickname());
-        if (users.getPassword() != null && !users.getPassword().isBlank()) entity.setPassword(passwordEncoder.encode(users.getPassword()));
+        if (users.getName() != null && !users.getName().isBlank()) {
+            entity.setName(users.getName());
+        }
+        if (users.getNickname() != null && !users.getNickname().isBlank()) {
+            entity.setNickname(users.getNickname());
+        }
+        if (users.getPassword() != null && !users.getPassword().isBlank()) {
+            entity.setPassword(passwordEncoder.encode(users.getPassword()));
+        }
+        if (users.getEmail() != null && !users.getEmail().isBlank()) {
+            if (checkEmailDuplicate(users.getEmail())) return false; // 중복 이메일 체크
+            entity.setEmail(users.getEmail());
+        }
 
+        userRepository.save(entity);
         return true;
     }
 
@@ -113,7 +135,6 @@ public class UserService {
         ).collect(Collectors.toList());
     }
 
-    /** 즐겨찾기 추가: DB 조회 후 값 가져오기 (이미지 포함) */
     public void addFavorite(String username, Long targetId, String targetType) {
         String title = "제목 없음";
         String addr1 = "";
@@ -123,48 +144,23 @@ public class UserService {
         switch (targetType.toLowerCase()) {
             case "accommodation":
                 Accommodation a = accommodationRepository.findById(targetId).orElse(null);
-                if (a != null) {
-                    title = a.getTitle();
-                    addr1 = a.getAddr1();
-                    addr2 = a.getAddr2();
-                    firstImage = a.getFirstimage();
-                }
+                if (a != null) { title = a.getTitle(); addr1 = a.getAddr1(); addr2 = a.getAddr2(); firstImage = a.getFirstimage(); }
                 break;
             case "leports":
                 Leports l = leportsRepository.findById(targetId).orElse(null);
-                if (l != null) {
-                    title = l.getTitle();
-                    addr1 = l.getAddr1();
-                    addr2 = l.getAddr2();
-                    firstImage = l.getFirstimage();
-                }
+                if (l != null) { title = l.getTitle(); addr1 = l.getAddr1(); addr2 = l.getAddr2(); firstImage = l.getFirstimage(); }
                 break;
             case "shopping":
                 Shopping s = shoppingRepository.findById(targetId).orElse(null);
-                if (s != null) {
-                    title = s.getTitle();
-                    addr1 = s.getAddr1();
-                    addr2 = s.getAddr2();
-                    firstImage = s.getFirstimage();
-                }
+                if (s != null) { title = s.getTitle(); addr1 = s.getAddr1(); addr2 = s.getAddr2(); firstImage = s.getFirstimage(); }
                 break;
             case "restaurant":
                 Restaurant r = restaurantRepository.findById(targetId).orElse(null);
-                if (r != null) {
-                    title = r.getTitle();
-                    addr1 = r.getAddr1();
-                    addr2 = r.getAddr2();
-                    firstImage = r.getFirstimage();
-                }
+                if (r != null) { title = r.getTitle(); addr1 = r.getAddr1(); addr2 = r.getAddr2(); firstImage = r.getFirstimage(); }
                 break;
             case "touristspot":
                 TouristSpot t = touristSpotRepository.findById(targetId).orElse(null);
-                if (t != null) {
-                    title = t.getTitle();
-                    addr1 = t.getAddr1();
-                    addr2 = t.getAddr2();
-                    firstImage = t.getFirstimage();
-                }
+                if (t != null) { title = t.getTitle(); addr1 = t.getAddr1(); addr2 = t.getAddr2(); firstImage = t.getFirstimage(); }
                 break;
         }
 
